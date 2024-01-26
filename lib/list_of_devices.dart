@@ -161,8 +161,6 @@ class _BluetoothDevicesTableState extends State<BluetoothDevicesTable> {
       message = "Prijava uspješna";
     } else if (flag == 1) {
       message = "Prijava neuspješna, probajte opet!";
-    } else if (flag == 2) {
-      message = "Već ste prijavljeni!";
     } else {
       message = "Nepoznati error";
     }
