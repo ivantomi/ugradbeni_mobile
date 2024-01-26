@@ -2,7 +2,6 @@
 import 'dart:convert';
 import 'dart:developer';
 import "dart:async";
-import "package:collection/collection.dart";
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -19,7 +18,7 @@ class BluetoothDevicesTable extends StatefulWidget {
 
 class _BluetoothDevicesTableState extends State<BluetoothDevicesTable> {
   TextEditingController _usernameController = TextEditingController();
-  TextEditingController _passwordController = TextEditingController();
+  TextEditingController _idController = TextEditingController();
 
   Guid characteristicUuid = Guid("aac111b6-9d28-4785-98b4-d6c872de03d5");
   void _connectToDevice(BluetoothDevice device) async {
@@ -33,11 +32,16 @@ class _BluetoothDevicesTableState extends State<BluetoothDevicesTable> {
   }
 
   Future<void> _showPopup(BluetoothDevice device) async {
+    String username = '';
+    String id = '';
+
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(
-            textAlign: TextAlign.center, "Enter your username and password"),
+          textAlign: TextAlign.center,
+          "Enter your username and ID",
+        ),
         content: Column(
           children: [
             TextField(
@@ -45,8 +49,8 @@ class _BluetoothDevicesTableState extends State<BluetoothDevicesTable> {
               decoration: InputDecoration(labelText: "Username"),
             ),
             TextField(
-              controller: _passwordController,
-              decoration: InputDecoration(labelText: "Password"),
+              controller: _idController,
+              decoration: InputDecoration(labelText: "ID"),
             )
           ],
         ),
@@ -60,11 +64,30 @@ class _BluetoothDevicesTableState extends State<BluetoothDevicesTable> {
           ElevatedButton(
             onPressed: () {
               String username = _usernameController.text;
-              String password = _passwordController.text;
+              String id = _idController.text;
 
-              writeData(username, password, device);
+              final bool isIdValid = RegExp(r"[0-9]{3}-[0-9]{4}").hasMatch(id);
 
-              Navigator.pop(context);
+              if (isIdValid) {
+                writeData(username, id, device);
+                Navigator.pop(context);
+              } else {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: Text("Invalid ID"),
+                    content: Text("ID has to be in format xxx-xxxx"),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                        },
+                        child: Text("OK"),
+                      ),
+                    ],
+                  ),
+                );
+              }
             },
             child: Text("OK"),
           ),
@@ -74,8 +97,8 @@ class _BluetoothDevicesTableState extends State<BluetoothDevicesTable> {
   }
 
   Future<void> writeData(
-      String username, String password, BluetoothDevice device) async {
-    String loginData = username + " " + password;
+      String username, String id, BluetoothDevice device) async {
+    String loginData = username + " " + id;
     List<int> loginDataHex = utf8.encode(loginData);
 
     List<BluetoothService> services = await device.discoverServices();
@@ -85,7 +108,7 @@ class _BluetoothDevicesTableState extends State<BluetoothDevicesTable> {
         if (c.characteristicUuid == characteristicUuid) {
           try {
             await c.write(loginDataHex);
-            _waitForResponse(c);
+            _waitForResponse(c, device);
           } catch (e) {
             log("Error writing: $e");
           }
@@ -94,30 +117,42 @@ class _BluetoothDevicesTableState extends State<BluetoothDevicesTable> {
     });
   }
 
-  void _waitForResponse(BluetoothCharacteristic characteristic) async {
+  void _waitForResponse(
+      BluetoothCharacteristic characteristic, BluetoothDevice device) async {
     int flag = 0;
+    bool timeoutExpired = false;
 
-    List<int> valueAfterWaiting = await characteristic.read();
+    Timer(Duration(seconds: 10), () {
+      timeoutExpired = true;
+    });
 
-    log("procitano: $valueAfterWaiting");
+    while (!timeoutExpired) {
+      List<int> valueAfterWaiting = await characteristic.read();
+      log("procitano: $valueAfterWaiting");
 
-    log(valueAfterWaiting.toString());
+      log(valueAfterWaiting.toString());
 
-    String valueAfterWaitingConverted = valueAfterWaiting.toString();
+      String valueAfterWaitingConverted = valueAfterWaiting.toString();
 
-    if (valueAfterWaitingConverted == [0, 0, 0, 0].toString()) {
-      log("Login uspješan");
-    } else if (valueAfterWaitingConverted == [1, 0, 0, 0].toString()) {
-      log("Login neuspješan");
-      flag = 1;
-    } else if (valueAfterWaitingConverted == [2, 0, 0, 0].toString()) {
-      log("Već si logiran");
-      flag = 2;
-    } else {
-      log("Nešto je pošlo po krivu");
-      flag = -1;
+      if (valueAfterWaitingConverted == [0, 0, 0, 0].toString()) {
+        log("Login uspješan");
+        flag = 0;
+      } else if (valueAfterWaitingConverted == [1, 0, 0, 0].toString()) {
+        log("Login neuspješan");
+        flag = 1;
+      } else if (valueAfterWaitingConverted == [2, 0, 0, 0].toString()) {
+        log("Već si logiran");
+        flag = 2;
+      } else {
+        log("Nešto je pošlo po krivu");
+        flag = -1;
+      }
+      if (flag != -1) {
+        _showEndingPopup(flag);
+        await device.disconnect();
+        break;
+      }
     }
-    _showEndingPopup(flag);
   }
 
   void _showEndingPopup(int flag) {

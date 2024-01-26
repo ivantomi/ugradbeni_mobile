@@ -53,7 +53,6 @@ class _UserTablePageState extends State<UserTablePage> {
             ScanResult r = results.last;
             for (r in results) {
               if (!devices.contains(r.device) && r.device.advName != "") {
-                devices.add(r.device);
                 _bluetoothDevices.add(r.device);
                 log("Found device!");
                 log(r.device.advName);
@@ -112,8 +111,7 @@ class _UserTablePageState extends State<UserTablePage> {
           //   ),
           // ),
           SizedBox(
-            height: MediaQuery.of(context).size.height *
-                0.75, // Adjust the height as needed
+            height: MediaQuery.of(context).size.height * 0.75,
             child: BluetoothDevicesTable(devices: _bluetoothDevices),
           ),
           Padding(
